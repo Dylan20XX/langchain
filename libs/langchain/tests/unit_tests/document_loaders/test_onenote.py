@@ -1,19 +1,21 @@
+import os
+
 import pytest
 from pytest_mock import MockerFixture
 
 from langchain.docstore.document import Document
 from langchain.document_loaders.onenote import OneNoteLoader
-import os
+
 
 def test_initialization() -> None:
-    os.environ['MS_GRAPH_CLIENT_ID'] = "CLIENT_ID"
-    os.environ['MS_GRAPH_CLIENT_SECRET'] = "CLIENT_SECRET"
+    os.environ["MS_GRAPH_CLIENT_ID"] = "CLIENT_ID"
+    os.environ["MS_GRAPH_CLIENT_SECRET"] = "CLIENT_SECRET"
 
     loader = OneNoteLoader(
         notebook_name="test_notebook",
         section_name="test_section",
         page_title="test_title",
-        access_token="access_token"
+        access_token="access_token",
     )
     assert loader.notebook_name == "test_notebook"
     assert loader.section_name == "test_section"
@@ -23,19 +25,21 @@ def test_initialization() -> None:
         "Authorization": "Bearer access_token",
     }
 
+
 @pytest.mark.requires("bs4")
 def test_load(mocker: MockerFixture) -> None:
-    os.environ['MS_GRAPH_CLIENT_ID'] = "CLIENT_ID"
-    os.environ['MS_GRAPH_CLIENT_SECRET'] = "CLIENT_SECRET"
+    os.environ["MS_GRAPH_CLIENT_ID"] = "CLIENT_ID"
+    os.environ["MS_GRAPH_CLIENT_SECRET"] = "CLIENT_SECRET"
 
     mocker.patch(
-        "requests.get", return_value=mocker.MagicMock(json=lambda: {"value": []}, links=None)
+        "requests.get",
+        return_value=mocker.MagicMock(json=lambda: {"value": []}, links=None),
     )
     loader = OneNoteLoader(
         notebook_name="test_notebook",
         section_name="test_section",
         page_title="test_title",
-        access_token="access_token"
+        access_token="access_token",
     )
     documents = loader.load()
     assert documents == []
@@ -45,31 +49,25 @@ def test_load(mocker: MockerFixture) -> None:
         return_value=(
             "<html><head><title>Test Title</title></head>"
             "<body><p>Test Content</p></body></html>"
-        )
+        ),
     )
-    loader = OneNoteLoader(
-        object_ids=["test_id"],
-        access_token="access_token"
-    )
+    loader = OneNoteLoader(object_ids=["test_id"], access_token="access_token")
     documents = loader.load()
     assert documents == [
-        Document(
-            page_content="Test Content",
-            metadata={"title": "Test Title"}
-        )
+        Document(page_content="Test Title\nTest Content", metadata={"title": "Test Title"})
     ]
 
 
 def test_url() -> None:
-    os.environ['MS_GRAPH_CLIENT_ID'] = "CLIENT_ID"
-    os.environ['MS_GRAPH_CLIENT_SECRET'] = "CLIENT_SECRET"
+    os.environ["MS_GRAPH_CLIENT_ID"] = "CLIENT_ID"
+    os.environ["MS_GRAPH_CLIENT_SECRET"] = "CLIENT_SECRET"
 
     loader = OneNoteLoader(
         notebook_name="test_notebook",
         section_name="test_section",
         page_title="test_title",
         access_token="access_token",
-        onenote_api_base_url = "https://graph.microsoft.com/v1.0/me/onenote"
+        onenote_api_base_url="https://graph.microsoft.com/v1.0/me/onenote",
     )
     assert loader._url == (
         "https://graph.microsoft.com/v1.0/me/onenote/pages?$select=id"
@@ -83,7 +81,7 @@ def test_url() -> None:
         notebook_name="test_notebook",
         section_name="test_section",
         access_token="access_token",
-        onenote_api_base_url = "https://graph.microsoft.com/v1.0/me/onenote"
+        onenote_api_base_url="https://graph.microsoft.com/v1.0/me/onenote",
     )
     assert loader._url == (
         "https://graph.microsoft.com/v1.0/me/onenote/pages?$select=id"
@@ -95,7 +93,7 @@ def test_url() -> None:
     loader = OneNoteLoader(
         notebook_name="test_notebook",
         access_token="access_token",
-        onenote_api_base_url = "https://graph.microsoft.com/v1.0/me/onenote"
+        onenote_api_base_url="https://graph.microsoft.com/v1.0/me/onenote",
     )
     assert loader._url == (
         "https://graph.microsoft.com/v1.0/me/onenote/pages?$select=id"
@@ -106,7 +104,7 @@ def test_url() -> None:
     loader = OneNoteLoader(
         section_name="test_section",
         access_token="access_token",
-        onenote_api_base_url = "https://graph.microsoft.com/v1.0/me/onenote"
+        onenote_api_base_url="https://graph.microsoft.com/v1.0/me/onenote",
     )
     assert loader._url == (
         "https://graph.microsoft.com/v1.0/me/onenote/pages?$select=id"
@@ -118,7 +116,7 @@ def test_url() -> None:
         section_name="test_section",
         page_title="test_title",
         access_token="access_token",
-        onenote_api_base_url = "https://graph.microsoft.com/v1.0/me/onenote"
+        onenote_api_base_url="https://graph.microsoft.com/v1.0/me/onenote",
     )
     assert loader._url == (
         "https://graph.microsoft.com/v1.0/me/onenote/pages?$select=id"
@@ -130,7 +128,7 @@ def test_url() -> None:
     loader = OneNoteLoader(
         page_title="test_title",
         access_token="access_token",
-        onenote_api_base_url = "https://graph.microsoft.com/v1.0/me/onenote"
+        onenote_api_base_url="https://graph.microsoft.com/v1.0/me/onenote",
     )
     assert loader._url == (
         "https://graph.microsoft.com/v1.0/me/onenote/pages?$select=id"

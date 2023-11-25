@@ -1,12 +1,13 @@
 """Loads data from OneNote Notebooks"""
 from pathlib import Path
-from typing import Dict, Iterator, List
+from typing import Dict, Iterator, List, Optional
 
 import requests
 
 from langchain.docstore.document import Document
 from langchain.document_loaders.base import BaseLoader
-from langchain.pydantic_v1 import BaseSettings, BaseModel, Field, FilePath, SecretStr
+from langchain.pydantic_v1 import BaseModel, BaseSettings, Field, FilePath, SecretStr
+
 
 class _OneNoteGraphSettings(BaseSettings):
     client_id: str = Field(..., env="MS_GRAPH_CLIENT_ID")
@@ -14,6 +15,7 @@ class _OneNoteGraphSettings(BaseSettings):
 
     class Config:
         """Config for OneNoteGraphSettings."""
+
         env_prefix = ""
         case_sentive = False
         env_file = ".env"
@@ -26,7 +28,7 @@ class OneNoteLoader(BaseLoader, BaseModel):
     """Settings for the Microsoft Graph API client."""
     auth_with_token: bool = False
     """Whether to authenticate with a token or not. Defaults to False."""
-    access_token: str = None
+    access_token: str = ""
     """Personal access token"""
     onenote_api_base_url: str = "https://graph.microsoft.com/v1.0/me/onenote"
     """URL of Microsoft Graph API for OneNote"""
@@ -34,13 +36,13 @@ class OneNoteLoader(BaseLoader, BaseModel):
     """A URL that identifies a token authority"""
     token_path: FilePath = Path.home() / ".credentials" / "onenote_graph_token.txt"
     """Path to the file where the access token is stored"""
-    notebook_name: str = None
+    notebook_name: Optional[str] = None
     """Filter on notebook name"""
-    section_name: str = None
+    section_name: Optional[str] = None
     """Filter on section name"""
-    page_title: str = None
+    page_title: Optional[str] = None
     """Filter on section name"""
-    object_ids: List[str] = None
+    object_ids: Optional[List[str]] = None
     """ The IDs of the objects to load data from."""
 
     def lazy_load(self) -> Iterator[Document]:
@@ -71,12 +73,14 @@ class OneNoteLoader(BaseLoader, BaseModel):
                 title_tag = soup.title
                 if title_tag:
                     page_title = title_tag.get_text(strip=True)
-                page_content = soup.get_text(separator='\n', strip=True)
-                yield Document(page_content=page_content, metadata={"title": page_title})
+                page_content = soup.get_text(separator="\n", strip=True)
+                yield Document(
+                    page_content=page_content, metadata={"title": page_title}
+                )
         else:
             request_url = self._url
 
-            while request_url is not None:
+            while request_url != "":
                 response = requests.get(request_url, headers=self._headers, timeout=10)
                 response.raise_for_status()
                 pages = response.json()
@@ -88,13 +92,15 @@ class OneNoteLoader(BaseLoader, BaseModel):
                     page_title = ""
                     title_tag = soup.title
                     if title_tag:
-                        page_content = soup.get_text(separator='\n', strip=True)
-                    yield Document(page_content=page_content, metadata={"title": page_title})
+                        page_content = soup.get_text(separator="\n", strip=True)
+                    yield Document(
+                        page_content=page_content, metadata={"title": page_title}
+                    )
 
                 if "@odata.nextLink" in pages:
                     request_url = pages["@odata.nextLink"]
                 else:
-                    request_url = None
+                    request_url = ""
 
     def load(self) -> List[Document]:
         """
@@ -129,48 +135,49 @@ class OneNoteLoader(BaseLoader, BaseModel):
 
     def _auth(self) -> None:
         """Authenticate with Microsoft Graph API"""
-        if self.access_token is not None:
+        if self.access_token != "":
             return
 
         if self.auth_with_token:
-            with self.token_path.open('r') as token_file:
+            with self.token_path.open("r") as token_file:
                 self.access_token = token_file.read()
         else:
             try:
                 from msal import ConfidentialClientApplication
             except ImportError as e:
                 raise ImportError(
-                    'MSAL package not found, please install it with `pip install msal`'
+                    "MSAL package not found, please install it with `pip install msal`"
                 ) from e
 
             client_instance = ConfidentialClientApplication(
                 client_id=self.settings.client_id,
                 client_credential=self.settings.client_secret.get_secret_value(),
-                authority=self.authority_url
+                authority=self.authority_url,
             )
 
-            authorization_request_url = client_instance.get_authorization_request_url(self._scopes)
-            print('Visit the following url to give consent:')
+            authorization_request_url = client_instance.get_authorization_request_url(
+                self._scopes
+            )
+            print("Visit the following url to give consent:")
             print(authorization_request_url)
-            authorization_url = input('Paste the authenticated url here:\n')
+            authorization_url = input("Paste the authenticated url here:\n")
 
-
-            authorization_code = authorization_url.split('code=')[1].split('&')[0]
-            access_token_json = client_instance.acquire_token_by_authorization_code( 
-                code=authorization_code,
-                scopes=self._scopes
+            authorization_code = authorization_url.split("code=")[1].split("&")[0]
+            access_token_json = client_instance.acquire_token_by_authorization_code(
+                code=authorization_code, scopes=self._scopes
             )
-            self.access_token = access_token_json['access_token']
+            self.access_token = access_token_json["access_token"]
 
             try:
                 if not self.token_path.parent.exists():
                     self.token_path.parent.mkdir(parents=True)
             except Exception as e:
                 raise Exception(
-                    f"Could not create the folder {self.token_path.parent} to store the access token."
+                    f"Could not create the folder {self.token_path.parent} "
+                    + "to store the access token."
                 ) from e
 
-            with self.token_path.open('w') as token_file:
+            with self.token_path.open("w") as token_file:
                 token_file.write(self.access_token)
 
     @property
@@ -182,16 +189,21 @@ class OneNoteLoader(BaseLoader, BaseModel):
 
         query_params_list.append("$select=id")
         if self.notebook_name is not None:
-            filter_list.append("parentNotebook/displayName%20eq%20" +
-                f"'{self.notebook_name.replace(' ', '%20')}'")
+            filter_list.append(
+                "parentNotebook/displayName%20eq%20"
+                + f"'{self.notebook_name.replace(' ', '%20')}'"
+            )
             expand_list.append("parentNotebook")
         if self.section_name is not None:
-            filter_list.append("parentSection/displayName%20eq%20" +
-                f"'{self.section_name.replace(' ', '%20')}'")
+            filter_list.append(
+                "parentSection/displayName%20eq%20"
+                + f"'{self.section_name.replace(' ', '%20')}'"
+            )
             expand_list.append("parentSection")
         if self.page_title is not None:
-            filter_list.append("title%20eq%20" +
-                f"'{self.page_title.replace(' ', '%20')}'")
+            filter_list.append(
+                "title%20eq%20" + f"'{self.page_title.replace(' ', '%20')}'"
+            )
 
         if len(expand_list) > 0:
             query_params_list.append("$expand=" + ",".join(expand_list))
